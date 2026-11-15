@@ -1,0 +1,68 @@
+import numpy as np
+import os
+
+
+def get_val_where_equal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]==val]
+
+def get_val_where_lessequal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]<=val]
+
+def get_val_where_moreequal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]>=val]
+
+
+
+def checkdir_and_create(dir_name):
+    import os, sys
+    if os.path.isdir(dir_name)==False:
+        os.system('mkdir %s' %(dir_name))
+
+
+
+def struct2string(struct_time_i, ver='YYYY-mm-dd'):
+  if ver=='YYYY-mm-dd HH:MM:SS':
+    date_string=struct_time_i.strftime('%Y-%m-%d %H:%M:%S')
+  elif ver=='YYYY-mm-ddTHHMMSS':
+    date_string=struct_time_i.strftime('%Y-%m-%dT%H%M%S')
+  else:
+    date_string=struct_time_i.strftime('%Y-%m-%d')
+  return date_string
+
+
+
+def nans(shape, dtype=float):
+    a = np.empty(shape, dtype)
+    a.fill(np.nan)
+    return a
+
+
+
+#Homemade version of matlab tic and toc functions
+def tic():
+    import time
+    global startTime_for_tictoc
+    startTime_for_tictoc = time.time()
+
+def toc():
+    import time
+    if 'startTime_for_tictoc' in globals():
+        print "Elapsed time is " + str(time.time() - startTime_for_tictoc) + " seconds."
+    else:
+        print "Toc: start time not set"
+    return str(time.time() - startTime_for_tictoc)
+
+
+def pause():
+    programPause = raw_input("Press the <ENTER> key to continue...")
+
+def get_val_where_equal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]==val]
+
+def get_val_where_lessequal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]<=val]
+
+def get_val_where_moreequal(list_val, list_where, val):
+    return [j for i,j in enumerate(list_val) if list_where[i]>=val]
+
+

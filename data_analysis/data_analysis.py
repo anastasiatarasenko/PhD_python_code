@@ -1,0 +1,332 @@
+#!/usr/bin/env python
+import numpy as np
+from scipy import signal as sg
+from scipy import ndimage as nd
+import matplotlib.pyplot as plt
+import datetime
+
+import os, sys
+sys.path.append('/home/cercache/users/atarasen/codes/python/')
+sys.path.append('/home3/homedir7/perso/atarasen/codes/python/')
+import nice_functions as nf
+import nice_functions2 as nf2
+
+def str_date_todatetime(str_date):
+    #of type '2014-10-03T102248'
+    datetime_obj = datetime.datetime.strptime(str_date[0:4]+' '+str_date[5:7]+' '+str_date[8:10]+' '+ \
+                                              str_date[11:13]+' '+str_date[13:15]+' '+str_date[15:17],\
+                                              '%Y %m %d %H %M %S' ) # Look here for explanations: http://www.tutorialspoint.com/python
+    return datetime_obj
+
+
+def deg2rad(deg):
+    return deg * (np.pi/180)
+
+
+def getDistanceAndDirectionFromLatLonInKm(lat1,lon1,lat2,lon2):
+    # Haversine-formula from 
+    # http://stackoverflow.com/questions/3209899/determine-compass-direction-from-one-lat-lon-to-the-other
+
+    # provides distance in kilometers and 
+
+    # bearing angle (0 is West ?)
+
+    R = 6371 # Radius of the earth in km
+    dLat = deg2rad(lat2-lat1)  # deg2rad below
+    dLon = deg2rad(lon2-lon1)
+    a = (np.sin(dLat/2) * np.sin(dLat/2) +
+        np.cos(deg2rad(lat1)) * np.cos(deg2rad(lat2)) *
+        np.sin(dLon/2) * np.sin(dLon/2))
+
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+    d = R * c #Distance in km
+
+    y = np.sin(dLon) * np.cos(lat2)
+    x = (np.cos(lat1)*np.sin(lat2) -
+        np.sin(lat1)*np.cos(lat2)*np.cos(dLon))
+
+    #bearing_angle = np.degrees(np.arctan2(y, x))    
+    bearing_angle = (np.arctan2(y, x))
+
+    print 'bearing_angle', bearing_angle
+    return d, bearing_angle
+
+
+
+def velocity(ind_ij1, ind_ij2, lat, lon, t1, t2):
+
+    lat1 = lat[ind_ij1[1], ind_ij1[0]]; lon1 = lon[ind_ij1[1], ind_ij1[0]]
+    lat2 = lat[ind_ij2[1], ind_ij2[0]]; lon2 = lon[ind_ij2[1], ind_ij2[0]]
+#     lat1 = lat[ind_ij1[0], ind_ij1[1]]; lon1 = lon[ind_ij1[0], ind_ij1[1]] 
+#     lat2 = lat[ind_ij2[0], ind_ij2[1]]; lon2 = lon[ind_ij2[0], ind_ij2[1]]
+
+    dist, angle = getDistanceAndDirectionFromLatLonInKm(lat1, lon1, lat2, lon2)
+
+    d_time = str_date_todatetime(t1) - str_date_todatetime(t2)
+    dt_seconds = float(d_time.total_seconds())
+    dt_hours = dt_seconds/3600
+
+    speed_kmh = dist/dt_hours
+    speed_ms = (dist*0.001)/dt_seconds
+
+    U = np.cos(speed_ms)
+    V = np.sin(speed_ms)
+
+    U_imcoord = (ind_ij2[0]- ind_ij1[0])
+    V_imcoord = (ind_ij2[1]- ind_ij1[1])
+
+    return speed_kmh, speed_ms, U_imcoord, V_imcoord
+
+
+
+def ryba_MCC(im1, im2, smallbox_size, x1, y1):
+# im1 and im2 are 2 consequtive image of the same size    
+# In fact, the "big-box" is not necessary - it can be just the size of the im1
+# However we can estimate the maximum displacement to avoid the 
+
+#    if smallbox_size <= bigbox_size/2:
+#        print "choose larger area of cross-correlation"
+
+
+    bigbox_size_i = im1.shape[0]
+    bigbox_size_j = im1.shape[1]
+
+#    bbx05  = bigbox_size/2
+    sbx05 = smallbox_size/2
+
+
+    x2 = x1+smallbox_size;
+    y2 = y1+smallbox_size
+    small_im1 = im1[x1:x2, y1:y2]
+    central_ind_ij_im1 =[x1 + smallbox_size/2, y1 + smallbox_size/2]
+
+    print 'small_im1.shape', small_im1.shape
+
+
+    max_crosscorr2d = np.zeros((smallbox_size, smallbox_size),)
+    mean_crosscorr = 0
+
+    #search area in by sbx05 larger than the matrix of _central points_ used for the double i-j loop 
+    search_area_x1 = 0; search_area_x2 = bigbox_size_i
+    search_area_y1 = 0; search_area_y2 = bigbox_size_j
+
+
+    iii_list = np.arange(sbx05, bigbox_size_i-sbx05)
+    jjj_list = np.arange(sbx05, bigbox_size_j-sbx05)
+
+    ind_i = []; ind_j = []
+    # Loop is for central points coordinates!
+    for i_en, i in enumerate(iii_list):
+        for j_en, j in enumerate(jjj_list):
+            #print i_en, 'from', len(iii_list)
+            #print j_en, 'from', len(jjj_list)
+
+            i1 = i-sbx05; i2 = (sbx05+i)
+            j1 = j-sbx05; j2 =(sbx05+j)
+
+            small_im2 = im2[i1:i2, j1:j2]
+            #print 'small_im2.shape', small_im2.shape
+
+
+            temp_c = sg.correlate(small_im1, small_im2,  mode='same')
+            crosscorr_temp = np.nanmean(np.nanmean(temp_c, 1), 0)
+            print crosscorr_temp, mean_crosscorr
+
+            if crosscorr_temp > mean_crosscorr:
+                mean_crosscorr = crosscorr_temp
+                max_crosscorr2d = temp_c
+
+                central_ind_ij_im2 = [i, j] #these are true indexes of the full test image (not in terms of small box)
+                ind_i = [i1, i2] #dont need in future
+                ind_j = [j1, j2] #dont need in future
+
+                fig = plt.figure(100, figsize = (15, 5))
+                ax1 = fig.add_subplot(1,3,1)
+                plt.pcolormesh(im1)
+                plt.clim([-0.02, 0.10])
+                plt.colorbar()
+                plt.plot([y1, y2, y2, y1, y1], [x1, x1, x2, x2, x1], 'r')
+                plt.title("small_im1")
+
+                ax2 = fig.add_subplot(1,3,2)
+                plt.pcolormesh(im2)
+                plt.clim([-0.02, 0.10])
+                plt.colorbar()
+
+                plt.plot([search_area_y1, search_area_y2, search_area_y2, search_area_y1, search_area_y1],\
+                         [search_area_x1, search_area_x1, search_area_x2, search_area_x2, search_area_x1], 'm')
+                plt.plot([y1, y2, y2, y1, y1], [x1, x1, x2, x2, x1], 'b')
+                plt.plot([j1, j2, j2, j1, j1], [i1, i1, i2, i2, i1], 'r')
+                plt.title("small_im2")
+
+                ax3 = fig.add_subplot(1,3,3)
+                plt.pcolormesh(max_crosscorr2d)
+                plt.colorbar()
+                plt.title("max_crosscorr2d")
+                plt.show()
+
+
+# Plotting                 
+    fig = plt.figure(figsize = (12, 4))
+
+    fig.add_subplot(1, 3, 1)
+    plt.pcolormesh(small_im1)
+    plt.title("small_im1")
+    plt.axis('equal')
+    plt.colorbar()
+
+    fig.add_subplot(1, 3, 2)
+    plt.pcolormesh(im2[ind_i[0]:ind_i[1], ind_j[0]:ind_j[1]])
+    plt.title("small_im2")
+    plt.axis('equal')
+    plt.colorbar()
+    plt.show()
+
+    return mean_crosscorr, max_crosscorr2d, central_ind_ij_im2
+
+
+
+def corr_fft(f1, f2):
+    fft_1 =np.fft.fft2(f1)
+    fft_1 = np.fft.fftshift(fft_1)
+
+    fft_1cc = np.conj(np.fft.fft2(f1))
+    fft_1cc = np.fft.fftshift(fft_1cc)
+
+
+    fft_2 =np.fft.fft2(f2)
+    fft_2 = np.fft.fftshift(fft_2)
+
+    fft_2cc = np.conj(np.fft.fft2(f2))
+    fft_2cc =np.fft.fftshift(fft_2cc)
+
+    #def_matrix = np.sqrt(abs(fft_1*fft_2cc))/np.sqrt(fft_1*fft_1cc)*(np.sqrt(fft_2*fft_2cc))
+    def_matrix = np.sqrt(abs(np.fft.ifft2(fft_1*fft_2cc/(np.sqrt(fft_1*fft_1cc)*np.sqrt(fft_2*fft_2cc)))))
+    def_matrix = np.fft.ifftshift(def_matrix)
+
+    return def_matrix
+
+
+
+def make_window(lx, ly):
+#create a Kernel - square matrix of type:
+# [[2 1 2]
+#  [1 0 1]
+#  [2 1 2]]
+    a = np.ones(ly)
+    c = np.zeros((lx, ly),)
+    c[0] = np.arange(0, ly)
+
+    for i in range(1, lx):
+        c[i] = c[i-1]+a
+
+    window = np.zeros((lx*2 - 1, ly*2 - 1), )
+    window[0:lx, 0:ly] = np.flipud(np.fliplr(c)) ; window[(lx-1):, (ly-1):] = c
+    window += np.flipud(window)
+
+#     correct the middle line and middle column that are double now (#ts not the error to do it twice)
+    window[0:lx, 0:ly] = np.flipud(np.fliplr(c)); window[(lx-1):, (ly-1):] = c
+    window[lx-1, ly-1] = 1
+    return window
+
+
+def dist_window(lx, ly):
+# Calculate the true distances
+    ryba = np.ones((lx, ly),)
+
+    for i in range(lx):
+        for j in range(ly):
+            if np.logical_and(i==(lx-1), j==(ly-1))==False:
+                ryba[i, j] = np.sqrt(np.square(lx - i)+np.square(ly-j))
+
+    window = np.ones((lx*2 - 1, ly*2 - 1), )
+    window[0:lx, 0:ly] = ryba;
+    window[(lx-1):, :ly] = np.flipud(ryba)
+    window[:, (ly-1):] = np.fliplr(window[:, :(ly)])
+    return window
+
+def dist_window(lx, ly):
+# Calculate the true distances
+    ryba = np.ones((lx, ly),)
+
+    for i in range(lx):
+        for j in range(ly):
+            if np.logical_and(i==(lx-1), j==(ly-1))==False:
+                ryba[i, j] = np.sqrt(np.square(lx - i)+np.square(ly-j))
+
+    window = np.ones((lx*2 - 1, ly*2 - 1), )
+    window[0:lx, 0:ly] = ryba;
+    window[(lx-1):, :ly] = np.flipud(ryba)
+    window[:, (ly-1):] = np.fliplr(window[:, :(ly)])
+    return window
+
+
+
+def im_regularity_naive(image, lx, ly, plot_cond = False, mask_cond = False, norm_cond = False):
+    w, h = image.shape
+    #print ' image.shape:', w, h
+    smooth_filter = dist_window(lx, ly)
+    #print "Filter kernel:", smooth_filter
+
+    window_h, window_w = smooth_filter.shape
+
+    smoothed_data = np.zeros([w, h])
+
+    lx_new = lx-1 #lx not-the-py-style
+    ly_new  = ly-1
+    for i in range(lx_new, w-lx_new):
+        for j in range(ly_new, h-ly_new):
+            window = image[(i-lx_new):(i+lx), (j-ly_new):(j+ly)]
+            smoothed_data[(i-lx_new):(i+lx), (j-ly_new):(j+ly)] += window*(smooth_filter**(-1))
+
+    if norm_cond == True:
+        smoothed_data = smoothed_data/(lx*2-1)
+
+    if mask_cond == True:
+        mask = np.ones(smoothed_data.shape)
+        mask[(lx-1):h-(lx-1), :][:, (ly-1):w-(ly-1)]=0
+        smoothed_data = np.ma.array(smoothed_data, mask = mask)
+
+
+    if plot_cond == True:
+        plt.pcolormesh(smoothed_data)
+        plt.clim(0, 10)
+        plt.colorbar()
+        plt.show()
+
+    #print 'smoothed_data.shape', smoothed_data.shape    
+    return smoothed_data
+
+def im_regularity_sqrt(image, lx, ly):
+    #DONT USE IT - NOT FINISHED AND LOGIC IS BIZARRE
+    dim0, dim1 = image.shape
+    smoothed = np.zeros((dim0, dim1),)
+
+    filter_window = dist_window(lx, ly)
+
+# trying to adapt to 1D - 2D indeces        
+
+    ind_x, ind_y = np.meshgrid(np.arange(dim0), np.arange(dim1))
+    for ind_1d in range(image.shape[0], image.shape[1]):
+        x = ind_x[ind_1d]
+        y = ind_x[ind_1d]
+        cond_x = np.logical_and(x>lx, x<(dim0-lx-1))
+        cond_y = np.logical_and(y>lx, y<(dim1-ly-1))
+        if np.logical_and(cond_x,  cond_y)==True:
+            data_window = image[(-lx+x):(lx+x), (-ly+y):(ly+y)].ravel()
+            smoothed = data_window_flat*filter_window_flat.reshape([2*lx-1, 2*ly-1])
+
+    return smoothed
+
+
+def gaussian_smooth(im, w=[]):
+
+    s = 2
+    if w ==[]::q
+        w = im.shape[0]/3 #window_size
+    #evaluate the 'truncate' value: 
+    t = (((w - 1)/2)-0.5)/s
+    #filtering: 
+    filtered_data = nd.filters.gaussian_filter(data, sigma=s, truncate=t)
+    return filtered_data
+

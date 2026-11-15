@@ -1,0 +1,11 @@
+Metadata-Version: 1.0
+Name: cmod
+Version: 0.1
+Summary: Calculates Normalized Radar Cross Section using CMOD4/5 model
+Home-page: http://github.com/SOLab/cmod
+Author: Alexander Myasoedov
+Author-email: mag@rshu.ru
+License: UNKNOWN
+Description: UNKNOWN
+Keywords: cmod,sar,nrcs
+Platform: UNKNOWN

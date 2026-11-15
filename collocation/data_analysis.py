@@ -1,0 +1,229 @@
+#!/usr/bin/env python
+import numpy as np
+from scipy import signal as sg
+import matplotlib.pyplot as plt
+
+import os, sys
+sys.path.append('/home/cercache/users/atarasen/codes/python/')
+sys.path.append('/home3/homedir7/perso/atarasen/codes/python/')
+import nice_functions as nf
+import nice_functions2 as nf2
+
+
+def velocity(ind_i1, ind_j1, ind_i2, ind_j2, t1, t2, deg_lat, deg_lon):
+
+    res_lat = 1**(-deg_lat)
+    res_lon = 1**(-deg_lon)
+    d_time = t1-t2
+    
+    distance = np.sqrt(np.square((ind_i2[0] - ind_i1[0])*res_lat)+np.square(ind_j2[0] - ind_j1[0]))
+    
+
+    #ind_i1 = 
+
+
+def ryba_MCC(im1, im2, smallbox_size, x1, y1):
+# im1 and im2 are 2 consequtive image of the same size    
+# In fact, the "big-box" is not necessary - it can be just the size of the im1
+# However we can estimate the maximum displacement to avoid the 
+
+#    if smallbox_size <= bigbox_size/2:
+#        print "choose larger area of cross-correlation"
+        
+
+    bigbox_size_i = im1.shape[0]
+    bigbox_size_j = im1.shape[1]
+
+#    bbx05  = bigbox_size/2
+    sbx05 = smallbox_size/2
+    
+    
+    x2 = x1+smallbox_size;
+    y2 = y1+smallbox_size
+    small_im1 = im1[x1:x2, y1:y2]
+    print small_im1.shape
+
+    plt.figure()
+    plt.pcolormesh(small_im1)
+    plt.title("small_im1")
+    plt.show()
+            
+            
+    max_crosscorr2d = np.zeros((smallbox_size, smallbox_size),)
+    mean_crosscorr = 0
+    ind_i = []; ind_j = []
+    
+#    iii_list = np.arange(sbx05, bigbox_size_i-sbx05)
+#    jjj_list = np.arange(sbx05, bigbox_size_j-sbx05)
+    iii_list = np.arange(100, bigbox_size_i-sbx05)
+    jjj_list = np.arange(100, bigbox_size_j-sbx05)
+
+    for i_en, i in enumerate(iii_list):
+        for j_en, j in enumerate(jjj_list):
+            print i_en, 'from', len(iii_list)
+            print j_en, 'from', len(jjj_list)
+            i1 = i-sbx05; i2 = (sbx05+i)
+            j1 = j-sbx05; j2 =(sbx05+j)            
+
+            small_im2 = im2[i1:i2, j1:j2]
+            
+            #print small_im2.shape
+            
+            temp_c = sg.correlate(small_im1, small_im2,  mode='same')
+            crosscorr_temp = np.nanmean(np.nanmean(temp_c, 1), 0)
+            
+            if crosscorr_temp > mean_crosscorr:
+                mean_crosscorr = crosscorr_temp
+                ind_i = [i1, i2]
+                ind_j = [j1, j2]
+                max_crosscorr2d = temp_c
+
+    fig = plt.figure(figsize = (12, 4))
+    
+    fig.add_subplot(1, 3, 1)
+    plt.pcolormesh(small_im1)
+    plt.title("small_im1")
+    plt.axis('equal')
+    plt.colorbar()
+
+    fig.add_subplot(1, 3, 2)   
+    plt.pcolormesh(im2[ind_i[0]:ind_i[1], ind_j[0]:ind_j[1]])
+    plt.title("small_im2")
+    plt.axis('equal')
+    plt.colorbar()
+
+    fig.add_subplot(1, 3, 3)
+    plt.pcolormesh(max_crosscorr2d)
+    plt.title("max_crosscorr")
+    plt.axis('equal')
+    plt.colorbar()
+
+    plt.show()
+       
+    return mean_crosscorr, max_crosscorr2d, ind_i, ind_j
+
+
+
+def corr_fft(f1, f2):
+    fft_1 =np.fft.fft2(f1)
+    fft_1 = np.fft.fftshift(fft_1)
+    
+    fft_1cc = np.conj(np.fft.fft2(f1))
+    fft_1cc = np.fft.fftshift(fft_1cc)
+
+    
+    fft_2 =np.fft.fft2(f2)
+    fft_2 = np.fft.fftshift(fft_2)    
+    
+    fft_2cc = np.conj(np.fft.fft2(f2))
+    fft_2cc =np.fft.fftshift(fft_2cc)
+    
+    #def_matrix = np.sqrt(abs(fft_1*fft_2cc))/np.sqrt(fft_1*fft_1cc)*(np.sqrt(fft_2*fft_2cc))
+    def_matrix = np.sqrt(abs(np.fft.ifft2(fft_1*fft_2cc/(np.sqrt(fft_1*fft_1cc)*np.sqrt(fft_2*fft_2cc)))))
+    def_matrix = np.fft.ifftshift(def_matrix)
+    
+    return def_matrix
+
+
+
+def make_window(lx, ly):
+#create a Kernel - square matrix of type:
+# [[2 1 2]
+#  [1 0 1]
+#  [2 1 2]]
+    a = np.ones(ly)
+    c = np.zeros((lx, ly),)
+    c[0] = np.arange(0, ly)
+
+    for i in range(1, lx):                       
+        c[i] = c[i-1]+a
+
+    window = np.zeros((lx*2 - 1, ly*2 - 1), )
+    window[0:lx, 0:ly] = np.flipud(np.fliplr(c)) ; window[(lx-1):, (ly-1):] = c
+    window += np.flipud(window)
+    
+#     correct the middle line and middle column that are double now (#ts not the error to do it twice)
+    window[0:lx, 0:ly] = np.flipud(np.fliplr(c)); window[(lx-1):, (ly-1):] = c 
+    window[lx-1, ly-1] = 1
+    return window
+
+
+def dist_window(lx, ly):
+# Calculate the true distances
+    ryba = np.ones((lx, ly),)
+     
+    for i in range(lx):
+        for j in range(ly):            
+            if np.logical_and(i==(lx-1), j==(ly-1))==False:
+                ryba[i, j] = np.sqrt(np.square(lx - i)+np.square(ly-j))
+   
+    window = np.ones((lx*2 - 1, ly*2 - 1), )  
+    window[0:lx, 0:ly] = ryba;
+    window[(lx-1):, :ly] = np.flipud(ryba)
+    window[:, (ly-1):] = np.fliplr(window[:, :(ly)])   
+    return window
+
+
+
+def im_regularity_naive(image, lx, ly, plot_cond = False, mask_cond = False, norm_cond = False):
+    w, h = image.shape
+    #print ' image.shape:', w, h
+    smooth_filter = dist_window(lx, ly)
+    #print "Filter kernel:", smooth_filter
+    
+    window_h, window_w = smooth_filter.shape
+
+    smoothed_data = np.zeros([w, h])
+    
+    lx_new = lx-1 #lx not-the-py-style
+    ly_new  = ly-1
+    for i in range(lx_new, w-lx_new):
+        for j in range(ly_new, h-ly_new):
+            window = image[(i-lx_new):(i+lx), (j-ly_new):(j+ly)]                     
+            smoothed_data[(i-lx_new):(i+lx), (j-ly_new):(j+ly)] += window*(smooth_filter**(-1))
+                            
+    if norm_cond == True:
+        smoothed_data = smoothed_data/(lx*2-1) 
+        
+    if mask_cond == True:
+        mask = np.ones(smoothed_data.shape)
+        mask[(lx-1):h-(lx-1), :][:, (ly-1):w-(ly-1)]=0    
+        smoothed_data = np.ma.array(smoothed_data, mask = mask)
+   
+
+    if plot_cond == True:
+        plt.pcolormesh(smoothed_data)
+        plt.clim(0, 10)
+        plt.colorbar()
+        plt.show()    
+        
+    #print 'smoothed_data.shape', smoothed_data.shape    
+    return smoothed_data
+
+
+
+def im_regularity_sqrt(image, lx, ly):
+    #DONT USE IT - NOT FINISHED AND LOGIC IS BIZARRE
+    dim0, dim1 = image.shape
+    smoothed = np.zeros((dim0, dim1),)
+    
+    filter_window = dist_window(lx, ly)
+
+# trying to adapt to 1D - 2D indeces        
+
+    ind_x, ind_y = np.meshgrid(np.arange(dim0), np.arange(dim1)) 
+    for ind_1d in range(image.shape[0], image.shape[1]):
+        x = ind_x[ind_1d]
+        y = ind_x[ind_1d]
+        cond_x = np.logical_and(x>lx, x<(dim0-lx-1))
+        cond_y = np.logical_and(y>lx, y<(dim1-ly-1))
+        if np.logical_and(cond_x,  cond_y)==True:  
+            data_window = image[(-lx+x):(lx+x), (-ly+y):(ly+y)].ravel()
+            smoothed = data_window_flat*filter_window_flat.reshape([2*lx-1, 2*ly-1])
+            
+    return smoothed
+    
+    
+
+        
+        

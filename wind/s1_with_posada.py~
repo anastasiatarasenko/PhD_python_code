@@ -1,0 +1,73 @@
+### Set of basic python functions to work with Sentinel-1 image using posada
+# author: Tarasenko Anastasia with posada code (Solab),
+# date: Jul-Aug 2017 
+
+
+import numpy as np
+
+import scipy.signal as sg
+import scipy.ndimage as ndimage
+
+import sys, os
+
+# sys.path.append('/home/mag/Documents/repos/solab/POSADA/') #common version on student server
+## sys.path.append('/home/tarasenko/codes/posada3/') #was old version (before switching to posada3 on python3)
+sys.path.append('/home/tarasenko/prj/posada3/') #last version on my computerin St.P.
+
+from posada.Handlers import Sentinel_1 as SAR
+from posada.Models import Swath
+from posada.Readers import SAFE
+
+
+sys.path.append('/home/tarasenko/codes/python/visu_stuff/')
+import nice_visu as visu
+
+
+def get_s1_data(pn, fn, res_m = 500, pol = 'hh'):
+# Get data from Sentinel1 image
+# sar.get_field_names() 
+    sarf = SAFE(url=pn+fn, polarisation=pol)
+    sar = Swath()
+    sar.load(sarf)
+    sar.add_handler(SAR)
+    sar.set_spacing(sar.resolution2spacing(res_m))
+
+    s0 = sar.get_values('sigma0')
+    inc = sar.get_values('incidence')
+
+    lat = sar.get_values( 'lat')
+    lon = sar.get_values( 'lon')
+
+
+   
+    # Nice images from Albert Murtazin
+    s0_corr = sar.get_values('nice_image')
+
+    # Wind values
+    wind_speed = sar.get_values('wind_speed')
+    
+    # Wind directions from NCEP
+    wdir_ncep = sar.get_values('wind_dir_ncep_gfs')-180
+    
+    # Wind directions from ERA Interim
+    wdir_interim = sar.get_values('wind_dir_era_interim')-180
+    
+    
+    if lat[0,0]-lat[-1,-1]>0:
+        trj = 'desc'
+        
+        #rotate everything to get good vectors for quiver
+        s0 = np.flipud(np.fliplr(s0))
+        s0_corr = np.flipud(np.fliplr(s0_corr))
+
+        wind_speed = np.flipud(np.fliplr(wind_speed))
+        wdir_ncep = np.flipud(np.fliplr(wdir_ncep))
+        wdir_interim = np.flipud(np.fliplr(wdir_interim))
+
+        lat = np.flipud(np.fliplr(lat))
+        lon = np.flipud(np.fliplr(lon))
+    else:
+        trj = 'asc'
+    print (trj +' trajectory') 
+    
+    return s0, s0_corr, lat, lon, wind_speed, wdir_ncep, wdir_interim, trj
